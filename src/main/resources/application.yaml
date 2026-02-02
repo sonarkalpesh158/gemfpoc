@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: gemfpoc
+  # --- Database Configuration ---
+  datasource:
+    url: jdbc:mysql://localhost:3306/poc_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # --- JPA / Hibernate Settings ---
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+
+# --- Server Configuration ---
+server:
+  port: 8080
+
+# --- Logging Configuration ---
+logging:
+  level:
+    com.poc.gemf: INFO
+    org.springframework.cache: DEBUG
+# --- Actuator Configuration (Metrics & Monitoring) ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*" # Expose ALL endpoints (health, metrics, info, beans, mappings)
+  endpoint:
+    health:
+      show-details: always # Show detailed DB and Disk space info
