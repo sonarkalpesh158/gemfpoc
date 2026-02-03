@@ -1,6 +1,6 @@
 version: '3.8'
 services:
-  # --- 1. GemFire ( Bound Address & IPv4) ---
+  # --- 1. GemFire (Bound Address & IPv4) ---
   gemfire:
     image: apachegeode/geode:latest
     container_name: gemfire-poc
@@ -8,20 +8,32 @@ services:
     ports:
       - "10334:10334"
       - "40404:40404"
+
+    # Added a volume to store data permanently
+    volumes:
+      - gemfire-data:/data
+
     command: >
       sh -c "
+        # Deletes stale lock files so it doesn't crash on restart
+        rm -f locator1/vf.gf.locator.pid &&
+        rm -f /data/server1/vf.gf.server.pid &&
+      
         echo 'Starting Locator...' &&
         gfsh start locator --name=locator1 --port=10334 --mcast-port=0 --hostname-for-clients=gemfire --bind-address=gemfire --J=-Djava.net.preferIPv4Stack=true &&
       
         echo 'Starting Server...' &&
-        gfsh start server --name=server1 --locators=gemfire[10334] --bind-address=gemfire --hostname-for-clients=gemfire --J=-Djava.net.preferIPv4Stack=true &&
+        # ### CHANGED: Added '--dir=/data/server1' so server files are saved in the volume we mounted
+        gfsh start server --name=server1 --dir=/data/server1 --locators=gemfire[10334] --bind-address=gemfire --hostname-for-clients=gemfire --J=-Djava.net.preferIPv4Stack=true &&
       
         echo 'Creating Region...' &&
-        gfsh -e 'connect --locator=gemfire[10334]' -e 'create region --name=Products --type=PARTITION --eviction-entry-count=1000 --eviction-action=local-destroy' &&
+        # ### CHANGED: 
+        # 1. Used '--type=PARTITION_PERSISTENT' to enable disk storage.
+        # 2. Added '--if-not-exists' so it doesn't crash if the region was recovered from disk.
+        gfsh -e 'connect --locator=gemfire[10334]' -e 'create region --name=Products --type=PARTITION_PERSISTENT --if-not-exists --eviction-entry-count=1000 --eviction-action=local-destroy' &&
       
         tail -f /dev/null
       "
-    # Healthcheck updated to use 'gemfire' hostname
     healthcheck:
       test: ["CMD-SHELL", "gfsh -e 'connect --locator=gemfire[10334]' -e 'list members'"]
       interval: 10s
@@ -54,3 +66,7 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/poc_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATA_GEMFIRE_POOL_LOCATORS: "gemfire[10334]"
+
+# Defined the named volume here - docker will internally create the storage mapping with this volume for all services
+volumes:
+  gemfire-data:
