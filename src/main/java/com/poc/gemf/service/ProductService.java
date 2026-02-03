@@ -25,6 +25,7 @@ public class ProductService {
     private final ProductMapper productMapper;
 
     @Transactional
+    @CachePut(value = "Products", key = "#result.id")
     public ProductDto createProduct(ProductDto dto) {
         // 1. Convert
         Product product = productMapper.toEntity(dto);

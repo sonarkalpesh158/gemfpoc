@@ -1,9 +1,11 @@
 spring:
   application:
     name: gemfpoc
+
   # --- Database Configuration ---
   datasource:
-    url: jdbc:mysql://localhost:3306/poc_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    # CHANGED: 'localhost' -> 'mysql' for Docker communication
+    url: jdbc:mysql://mysql:3306/poc_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -16,6 +18,14 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MySQL8Dialect
 
+  # --- GemFire Configuration ---
+  data:
+    gemfire:
+      pool:
+        locators: gemfire[10334]
+      pdx:
+        read-serialized: false
+
 # --- Server Configuration ---
 server:
   port: 8080
@@ -25,12 +35,13 @@ logging:
   level:
     com.poc.gemf: INFO
     org.springframework.cache: DEBUG
-# --- Actuator Configuration (Metrics & Monitoring) ---
+
+# --- Actuator Configuration ---
 management:
   endpoints:
     web:
       exposure:
-        include: "*" # Expose ALL endpoints (health, metrics, info, beans, mappings)
+        include: "*"
   endpoint:
     health:
-      show-details: always # Show detailed DB and Disk space info
+      show-details: always

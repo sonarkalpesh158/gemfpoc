@@ -1,38 +1,32 @@
 version: '3.8'
 services:
-  # --- 1. GemFire (Bound Address & IPv4) ---
+  # --- 1. GemFire  ---
   gemfire:
     image: apachegeode/geode:latest
     container_name: gemfire-poc
     hostname: gemfire
+    restart: unless-stopped
     ports:
       - "10334:10334"
       - "40404:40404"
-
-    # Added a volume to store data permanently
+      - "7070:7070"
     volumes:
       - gemfire-data:/data
-
     command: >
       sh -c "
-        # Deletes stale lock files so it doesn't crash on restart
-        rm -f locator1/vf.gf.locator.pid &&
-        rm -f /data/server1/vf.gf.server.pid &&
-      
-        echo 'Starting Locator...' &&
-        gfsh start locator --name=locator1 --port=10334 --mcast-port=0 --hostname-for-clients=gemfire --bind-address=gemfire --J=-Djava.net.preferIPv4Stack=true &&
-      
-        echo 'Starting Server...' &&
-        # ### CHANGED: Added '--dir=/data/server1' so server files are saved in the volume we mounted
-        gfsh start server --name=server1 --dir=/data/server1 --locators=gemfire[10334] --bind-address=gemfire --hostname-for-clients=gemfire --J=-Djava.net.preferIPv4Stack=true &&
-      
-        echo 'Creating Region...' &&
-        # ### CHANGED: 
-        # 1. Used '--type=PARTITION_PERSISTENT' to enable disk storage.
-        # 2. Added '--if-not-exists' so it doesn't crash if the region was recovered from disk.
-        gfsh -e 'connect --locator=gemfire[10334]' -e 'create region --name=Products --type=PARTITION_PERSISTENT --if-not-exists --eviction-entry-count=1000 --eviction-action=local-destroy' &&
-      
-        tail -f /dev/null
+      rm -rf locator1 &&
+      mkdir -p locator1 &&
+      mkdir -p /data/server_new &&
+      rm -f /data/server_new/vf.gf.server.pid &&
+      echo 'Starting Locator...' &&
+      gfsh start locator --name=locator1 --port=10334 --mcast-port=0 --hostname-for-clients=gemfire --bind-address=gemfire --J=-Djava.net.preferIPv4Stack=true &&
+      echo 'Configuring PDX...' &&
+      gfsh -e 'connect --locator=gemfire[10334]' -e 'configure pdx --read-serialized=true --disk-store=DEFAULT' &&
+      echo 'Starting Server (Persisting to /data)...' &&
+      gfsh start server --name=server1 --dir=/data/server_new --locators=gemfire[10334] --bind-address=gemfire --hostname-for-clients=gemfire --J=-Djava.net.preferIPv4Stack=true &&
+      echo 'Creating Region...' &&
+      gfsh -e 'connect --locator=gemfire[10334]' -e 'create region --name=Products --type=PARTITION_PERSISTENT --if-not-exists --eviction-entry-count=1000 --eviction-action=local-destroy' &&
+      tail -f /dev/null
       "
     healthcheck:
       test: ["CMD-SHELL", "gfsh -e 'connect --locator=gemfire[10334]' -e 'list members'"]
@@ -46,27 +40,36 @@ services:
     image: mysql:8.0
     container_name: mysql-poc
     hostname: mysql
+    restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: poc_db
+    healthcheck:
+      test: [ "CMD", "mysqladmin" ,"ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     ports:
       - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
 
-  # --- 3. YOUR APP ---
+  # --- 3. JAVA APP ---
   app-service:
     build: .
     container_name: spring-app-poc
+    restart: on-failure
     ports:
       - "9090:8080"
     depends_on:
       gemfire:
         condition: service_healthy
       mysql:
-        condition: service_started
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/poc_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATA_GEMFIRE_POOL_LOCATORS: "gemfire[10334]"
 
-# Defined the named volume here - docker will internally create the storage mapping with this volume for all services
 volumes:
   gemfire-data:
+  mysql-data:
